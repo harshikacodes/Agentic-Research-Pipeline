@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 from tavily import TavilyClient
 import os
 from rich import print
+from playwright.sync_api import sync_playwright
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -29,11 +30,33 @@ def web_search(query : str) -> str:
 def scrape_url(url: str) -> str:
     """Scrape and return clean text content from a given URL for deeper reading."""
     try:
-        resp = requests.get(url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
-        soup = BeautifulSoup(resp.text, "html.parser")
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+
+            page = browser.new_page(
+                user_agent="Mozilla/5.0"
+            )
+
+            page.goto(
+                url,
+                wait_until="domcontentloaded",
+                timeout=30000
+            )
+
+            # get the fully loaded html
+            html = page.content()
+
+            browser.close()
+        # parse html using BeautifulSoup
+        soup = BeautifulSoup(html, "html.parser")
+
         for tag in soup(["script", "style", "nav", "footer"]):
             tag.decompose()
-        return soup.get_text(separator=" ", strip=True)[:3000]
+
+        # extract clean text
+        text = soup.get_text(separator=" ", strip=True)
+        return text[:3000]
+    
     except Exception as e:
         return f"Could not scrape URL: {str(e)}"
 
